@@ -5,6 +5,8 @@ from rest_framework.response import Response
 
 from lotteries.views import (
     CurrentAccountView,
+    BetListView,
+    BetParticipateView,
     LoginView,
     LogoutView,
     OpenGiveawayView,
@@ -30,4 +32,10 @@ urlpatterns = [
     path("api/auth/me/", CurrentAccountView.as_view(), name="current-account"),
     path("api/giveaway/", OpenGiveawayView.as_view(), name="open-giveaway"),
     path("api/giveaway/participate/", ParticipateView.as_view(), name="participate"),
+    path("api/bets/", BetListView.as_view(), name="bets"),
+    path(
+        "api/bets/participate/",
+        BetParticipateView.as_view(),
+        name="bet-participate",
+    ),
 ]

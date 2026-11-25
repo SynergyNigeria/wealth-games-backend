@@ -20,6 +20,23 @@ python manage.py runserver 127.0.0.1:8001
 The API is available at `http://127.0.0.1:8001/api/`, and Django admin is at
 `http://127.0.0.1:8001/admin/`.
 
+## Managing football bets
+
+1. In Django admin, create a **Bet** with its question and total prize pool.
+   Add non-overlapping numeric answer ranges (leave an upper bound blank for an
+   open-ended range such as `11+`).
+2. Before the match starts, select the bet in the list and use **Close selected
+   bets to new entries**. Users can no longer enter; the result remains pending.
+3. After the outcome is known, edit the closed bet, choose **Correct answer**,
+   and save. Correct entries become winners and the prize pool is split equally
+   between them, to the nearest cent. If the pool has leftover cents, they are
+   allocated one at a time in entry order. There is no automatic match feed or
+   payment transfer.
+
+The frontend `/bets` page lists open and closed bets. Accounts are required;
+each account can submit one final range per bet. Only winning participants see
+the winner modal.
+
 Run tests with:
 
 ```powershell

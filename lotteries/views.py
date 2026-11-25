@@ -2,18 +2,27 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from rest_framework.authtoken.models import Token
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.authtoken.models import Token
 
-from .models import Giveaway, GiveawayEntry, GiveawayWinner
 from .draw_algorithm import participant_weights, select_weighted_winners
+from .models import (
+    Bet,
+    BetEntry,
+    BetOption,
+    Giveaway,
+    GiveawayEntry,
+    GiveawayWinner,
+)
 from .serializers import (
     AccountSerializer,
     AuthenticatedAccountSerializer,
+    BetParticipateSerializer,
+    BetSerializer,
     GiveawaySerializer,
     ParticipateSerializer,
     RegisterSerializer,
@@ -89,6 +98,76 @@ class CurrentAccountView(APIView):
 
     def get(self, request):
         return Response({"phone": request.user.username})
+
+
+class BetListView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        bets = Bet.objects.select_related("correct_option").prefetch_related(
+            "options",
+        )
+        context = {"request": request}
+        open_bets = BetSerializer(
+            bets.filter(status=Bet.Status.OPEN),
+            many=True,
+            context=context,
+        ).data
+        closed_bets = BetSerializer(
+            bets.exclude(status=Bet.Status.OPEN),
+            many=True,
+            context=context,
+        ).data
+        return Response({
+            "open_bets": open_bets,
+            "closed_bets": closed_bets,
+        })
+
+
+class BetParticipateView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = BetParticipateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        bet_id = serializer.validated_data["bet_id"]
+        option_id = serializer.validated_data["option_id"]
+
+        with transaction.atomic():
+            bet = get_object_or_404(
+                Bet.objects.select_for_update(),
+                pk=bet_id,
+            )
+            if bet.status != Bet.Status.OPEN:
+                return Response(
+                    {"detail": "This bet is closed to entries."},
+                    status=status.HTTP_410_GONE,
+                )
+            option = get_object_or_404(
+                BetOption,
+                pk=option_id,
+                bet=bet,
+            )
+            _, created = BetEntry.objects.get_or_create(
+                bet=bet,
+                user=request.user,
+                defaults={"option": option},
+            )
+
+        if not created:
+            return Response(
+                {"detail": "You have already entered this bet. Entries cannot be changed."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        bet = Bet.objects.select_related("correct_option").prefetch_related(
+            "options",
+        ).get(pk=bet.pk)
+        return Response(
+            {"bet": BetSerializer(bet, context={"request": request}).data},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 def close_giveaway_if_due(giveaway, participant_weight_by_id=None):
